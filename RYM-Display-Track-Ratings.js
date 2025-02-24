@@ -19,7 +19,7 @@
 
     // Constants
     const CACHE_EXPIRATION = 7 * 24 * 60 * 60 * 1000; // Cache expiration time in milliseconds (7 days)
-    const DEBUG_MODE = true; // Enable debug mode for logging
+    const DEBUG_MODE = false; // Enable debug mode for logging
     const DEFAULT_DELAY = 500; // Default delay between requests in milliseconds
 
     // Variables to manage state
