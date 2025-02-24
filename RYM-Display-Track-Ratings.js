@@ -1,13 +1,13 @@
 // ==UserScript==
 // @name         RYM Display Track Ratings
 // @namespace    http://tampermonkey.net/
-// @version      1.1
+// @version      1.2
 // @description  Displays individual track ratings, genres, and track rankings on RateYourMusic album or any release pages.
 // @author       cariosa
 // @match        https://rateyourmusic.com/release/*
 // @icon         https://e.snmc.io/2.5/img/sonemic.png
 // @grant        GM_xmlhttpRequest
-// @license      GPL3
+// @license      GPL-3.0-or-later
 // ==/UserScript==
 
 (function() {
