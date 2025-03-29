@@ -1,12 +1,11 @@
 // ==UserScript==
 // @name         RYM Display Track Ratings
 // @namespace    http://tampermonkey.net/
-// @version      1.4
-// @description  Displays individual track ratings, genres, and track rankings on RateYourMusic album or any release pages.
+// @version      1.5
+// @description  Displays average Track ratings and info directly on rateyourmusic album or any other release pages.
 // @author       cariosa
 // @match        https://rateyourmusic.com/release/*
 // @icon         https://e.snmc.io/2.5/img/sonemic.png
-// @grant        GM_xmlhttpRequest
 // @downloadURL  https://update.greasyfork.org/scripts/527869/RYM%20Display%20Track%20Ratings.user.js
 // @updateURL    https://raw.githubusercontent.com/cariosa/RYM-Display-Track-Ratings/refs/heads/main/RYM-Display-Track-Ratings.js
 // @grant        GM_setValue
@@ -23,9 +22,11 @@
     const DEFAULT_DELAY = 500; // Default delay between requests in milliseconds
 
     // Variables to manage state
-    let ratingsVisible = false; // Track visibility state of ratings and additional info
     let loadClickCount = 0; // Count of how many times "Load Track Ratings" has been clicked
-    let trackDataCache = GM_getValue('trackDataCache', {}); // Retrieve cache from storage or initialize empty object
+    let trackDataCache = getCache(); // Retrieve cache from storage or initialize empty object
+
+    // Fetch the global state of the "Toggle Genre/Rankings" button
+    let genreRankingsVisible = GM_getValue('genreRankingsVisible', true);
 
     // Logging function for debug messages
     const log = (message) => {
@@ -33,6 +34,20 @@
             console.log(message);
         }
     };
+
+    // Show error notifications
+    function showError(message) {
+        const errorElement = document.createElement('div');
+        errorElement.textContent = `Error: ${message}`;
+        errorElement.style.color = 'red';
+        errorElement.style.position = 'fixed';
+        errorElement.style.top = '10px';
+        errorElement.style.right = '10px';
+        errorElement.style.backgroundColor = 'white';
+        errorElement.style.padding = '5px';
+        document.body.appendChild(errorElement);
+        setTimeout(() => errorElement.remove(), 5000);
+    }
 
     // Create a button with specified text and click handler
     function createButton(text, onClick) {
@@ -53,6 +68,19 @@
         return button;
     }
 
+    // Create buttons dynamically
+    function createButtons(buttonsData) {
+        const buttonContainer = document.createElement('div');
+        buttonContainer.style.marginBottom = '10px';
+
+        buttonsData.forEach(({ text, onClick }) => {
+            const button = createButton(text, onClick);
+            buttonContainer.appendChild(button);
+        });
+
+        return buttonContainer;
+    }
+
     // Insert control buttons for loading track ratings and genres/rankings
     function insertButtons() {
         const trackContainers = [
@@ -66,18 +94,12 @@
                 return;
             }
 
-            const buttonContainer = document.createElement('div');
-            buttonContainer.style.marginBottom = '10px';
+            const buttonContainer = createButtons([
+                { text: 'Load Track Ratings', onClick: toggleTrackRatings },
+                { text: 'Toggle Genre/Rankings', onClick: toggleGenreRankings },
+                { text: 'Clear Cache', onClick: clearCache }
+            ]);
 
-            // Create buttons for loading track ratings, toggling genre/rankings, and clearing cache
-            const loadButton = createButton('Load Track Ratings', toggleTrackRatings);
-            const toggleButton = createButton('Toggle Genre/Rankings', toggleGenreRankings);
-            const clearCacheButton = createButton('Clear Cache', clearCache);
-            buttonContainer.appendChild(loadButton);
-            buttonContainer.appendChild(toggleButton);
-            buttonContainer.appendChild(clearCacheButton);
-
-            // Insert button container before the track list
             tracksContainer.parentNode.insertBefore(buttonContainer, tracksContainer);
             log('Buttons inserted successfully');
         });
@@ -150,6 +172,10 @@
 
     // Insert genre and rankings HTML into the track element
     function insertTrackInfo(trackElement, genre, rankings) {
+        if (!genreRankingsVisible) {
+            return;
+        }
+
         const tracklistLine = trackElement.querySelector('.tracklist_line');
         if (tracklistLine) {
             const genreElement = document.createElement('div');
@@ -168,70 +194,56 @@
 
     // Process the track data by fetching ratings and genre/rankings
     async function processTrackData(trackElement, index) {
-        log(`Processing track ${index + 1}`);
-
         const songLink = trackElement.querySelector('a.song');
         if (!songLink) {
             log(`No song link found for track ${index + 1}`);
             return;
         }
 
-        const url = songLink.href;
         const trackName = songLink.textContent.trim();
         const cacheKey = `rym_track_data_${trackName}`;
         const cachedData = trackDataCache[cacheKey];
 
         if (cachedData) {
-            const { rating, count, isBold, genre, rankings } = cachedData;
             log(`Using cached data for "${trackName}"`);
-            insertTrackRating(trackElement, rating, count, isBold);
-            insertTrackInfo(trackElement, genre, rankings);
+            insertTrackRating(trackElement, cachedData.rating, cachedData.count, cachedData.isBold);
+            insertTrackInfo(trackElement, cachedData.genre, cachedData.rankings);
             return;
         }
 
         try {
-            log(`Fetching data for track: "${trackName}" from URL: ${url}`);
+            log(`Fetching data for track: "${trackName}"`);
 
-            const response = await new Promise((resolve, reject) => {
-                GM_xmlhttpRequest({
-                    method: 'GET',
-                    url: url,
-                    onload: (response) => resolve(response),
-                    onerror: (error) => reject(error)
-                });
+            const response = await fetch(songLink.href, {
+                method: 'GET',
+                credentials: 'include',
             });
 
-            const trackRating = parseTrackRating(response.responseText);
-            const trackInfo = parseTrackInfo(response.responseText);
+            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+            const responseText = await response.text();
+            const trackRating = parseTrackRating(responseText);
+            const trackInfo = parseTrackInfo(responseText);
 
             if (!trackRating || !trackInfo) {
                 log(`Failed to fetch data for "${trackName}"`);
                 return;
             }
 
-            // Cache the fetched track data
-            trackDataCache[cacheKey] = {
-                rating: trackRating.rating,
-                count: trackRating.count,
-                isBold: trackRating.isBold,
-                genre: trackInfo.genre,
-                rankings: trackInfo.rankings,
-            };
-            GM_setValue('trackDataCache', trackDataCache); // Save cache to storage
-
+            trackDataCache[cacheKey] = { ...trackRating, ...trackInfo, timestamp: Date.now() };
+            GM_setValue('trackDataCache', trackDataCache);
             insertTrackRating(trackElement, trackRating.rating, trackRating.count, trackRating.isBold);
             insertTrackInfo(trackElement, trackInfo.genre, trackInfo.rankings);
         } catch (error) {
+            showError(`Failed to fetch data for "${trackName}". Please try again later.`);
             console.error(`Error processing "${trackName}":`, error);
-            alert(`Failed to fetch data for "${trackName}". Please try again later.`);
         }
 
-        await new Promise(resolve => setTimeout(resolve, DEFAULT_DELAY)); // Delay between requests
+        await new Promise(resolve => setTimeout(resolve, DEFAULT_DELAY));
     }
 
     // Process all tracks on the current page
     async function processAllTracks() {
-        log('Starting to process tracks');
         const trackContainers = [
             document.getElementById('tracks'),
             document.getElementById('tracks_mobile')
@@ -247,63 +259,74 @@
             log(`Found ${tracks.length} tracks`);
 
             for (let i = 0; i < tracks.length; i++) {
-                await processTrackData(tracks[i], i); // Wait for each track to be processed
+                await processTrackData(tracks[i], i);
             }
         }
-
-        log('Finished processing all tracks');
     }
 
-    // Toggle visibility of track ratings and additional info
+    // Toggle the track ratings visibility and load/unload the data
     function toggleTrackRatings() {
+        if (loadClickCount % 2 === 0) {
+            log('Loading track ratings');
+            processAllTracks();
+        } else {
+            log('Unloading track ratings');
+            clearTrackRatings();
+        }
         loadClickCount++;
-
-        const tracksContainers = [
-            document.getElementById('tracks'),
-            document.getElementById('tracks_mobile')
-        ];
-
-        tracksContainers.forEach((tracksContainer) => {
-            const trackRatings = tracksContainer.querySelectorAll('.page_release_section_tracks_songs_song_stats');
-            const genreElements = tracksContainer.querySelectorAll('.genre-info');
-            const rankingElements = tracksContainer.querySelectorAll('.ranking-info');
-
-            if (loadClickCount % 2 !== 0) {
-                if (!ratingsVisible) {
-                    processAllTracks();
-                    ratingsVisible = true;
-                    log('Track ratings and additional info loaded');
-                }
-            } else {
-                trackRatings.forEach(rating => rating.remove());
-                genreElements.forEach(genre => genre.remove());
-                rankingElements.forEach(ranking => ranking.remove());
-                ratingsVisible = false;
-                log('Track ratings and additional info removed');
-            }
-        });
     }
 
-    // Toggle visibility of genre and ranking information
+    // Clear the track ratings and additional data from the page
+    function clearTrackRatings() {
+        const ratingElements = document.querySelectorAll('.page_release_section_tracks_track_stats_scores');
+        ratingElements.forEach(el => el.remove());
+
+        const genreInfoElements = document.querySelectorAll('.genre-info');
+        genreInfoElements.forEach(el => el.remove());
+
+        const rankingInfoElements = document.querySelectorAll('.ranking-info');
+        rankingInfoElements.forEach(el => el.remove());
+
+        log('Cleared track ratings and additional info');
+    }
+
+    // Toggle visibility of genre/rankings
     function toggleGenreRankings() {
-        const genreElements = document.querySelectorAll('.genre-info');
-        const rankingElements = document.querySelectorAll('.ranking-info');
-        const isVisible = genreElements.length && genreElements[0].style.display !== 'none';
+        genreRankingsVisible = !genreRankingsVisible;
+        GM_setValue('genreRankingsVisible', genreRankingsVisible); // Save state globally
 
-        genreElements.forEach(el => el.style.display = isVisible ? 'none' : 'block');
-        rankingElements.forEach(el => el.style.display = isVisible ? 'none' : 'block');
+        // Hide or show genre/rankings based on the state
+        const genreInfoElements = document.querySelectorAll('.genre-info');
+        const rankingInfoElements = document.querySelectorAll('.ranking-info');
+
+        genreInfoElements.forEach(el => el.style.display = genreRankingsVisible ? 'block' : 'none');
+        rankingInfoElements.forEach(el => el.style.display = genreRankingsVisible ? 'block' : 'none');
+        log(genreRankingsVisible ? 'Genres and rankings visible' : 'Genres and rankings hidden');
     }
 
-    // Clear the track data cache
+    // Clear cached data
     function clearCache() {
         trackDataCache = {};
-        GM_setValue('trackDataCache', {}); // Clear cache from storage
-        alert('Cache cleared!');
+        GM_setValue('trackDataCache', trackDataCache);
+        log('Cache cleared');
     }
 
-    // Initialize the script after the page is fully loaded
-    window.addEventListener('load', () => {
-        log('Page loaded, inserting buttons');
-        insertButtons();
-    });
+    // Get the cache data from GM storage or initialize it
+    function getCache() {
+        const cachedData = GM_getValue('trackDataCache', {});
+        const now = Date.now();
+
+        // Delete expired cache entries
+        Object.keys(cachedData).forEach(key => {
+            const entry = cachedData[key];
+            if (now - entry.timestamp > CACHE_EXPIRATION) {
+                delete cachedData[key];
+            }
+        });
+
+        return cachedData;
+    }
+
+    // Initialize the script by inserting the control buttons
+    insertButtons();
 })();
