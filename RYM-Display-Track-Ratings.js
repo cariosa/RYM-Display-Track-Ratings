@@ -1,6 +1,6 @@
 // ==UserScript==
 // @name         RYM Display Track Ratings
-// @namespace    cariosa
+// @namespace    http://tampermonkey.net/
 // @version      1.6
 // @description  Displays average Track ratings and info directly on rateyourmusic album or any other release pages.
 // @author       cariosa
