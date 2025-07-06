@@ -5,7 +5,7 @@ A Userscript that displays individual track ratings, genres, and track rankings 
 
 These details are typically reserved for premium users, this userscript saves you a few clicks by fetching and displaying track information in any release page of rateyourmusic. It also works on firefox mobile.
 
-To prevent excessive usage and potential rate limiting, please use this userscript thoughtfully. It caches data for 7 days by default (you can adjust this duration by modifying the CACHE_EXPIRATION variable). This caching mechanism helps minimize the risk of hitting rate limits or getting your IP blocked. You can easily clear the cache by clicking the 'Clear Cache' button, and refresh the data by selecting 'Load Track Ratings' to obtain the latest information.
+To prevent potential rate limiting and IP address being blocked, please use this userscript thoughtfully. It caches data for 7 days by default. Delay between requests and Cache duration is configurable. You can easily clear the cache by clicking the 'Clear Cache' button, and refresh the data by selecting 'Load Track Ratings' to obtain the latest information.
 
 ## Installation
 
