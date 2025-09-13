@@ -1,18 +1,18 @@
 // ==UserScript==
 // @name         RYM Display Track Ratings
 // @namespace    http://tampermonkey.net/
-// @version      1.6
+// @version      1.7
 // @description  Displays average Track ratings and info directly on rateyourmusic album or any other release pages.
 // @author       cariosa
 // @match        https://rateyourmusic.com/release/*
 // @icon         https://e.snmc.io/2.5/img/sonemic.png
-// @downloadURL  https://update.greasyfork.org/scripts/527869/RYM%20Display%20Track%20Ratings.user.js
-// @updateURL    https://raw.githubusercontent.com/cariosa/RYM-Display-Track-Ratings/refs/heads/main/RYM-Display-Track-Ratings.js
 // @require      https://openuserjs.org/src/libs/sizzle/GM_config.js
 // @grant        GM_setValue
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // @license      GPL-3.0-or-later
+// @downloadURL  https://update.greasyfork.org/scripts/527869/RYM%20Display%20Track%20Ratings.user.js
+// @updateURL    https://update.greasyfork.org/scripts/527869/RYM%20Display%20Track%20Ratings.meta.js
 // ==/UserScript==
 
 // --- I. SETTINGS PANEL SETUP ---
@@ -34,7 +34,14 @@ GM_config.init({
         }
     }
 });
-GM_registerMenuCommand('Configure Track Ratings', () => GM_config.open());
+
+function clearAllCache() {
+    GM_setValue('trackDataCache', {});
+    alert('RYM Track Ratings: All cached track data has been cleared.');
+}
+
+GM_registerMenuCommand('⚙️ Configure Track Ratings', () => GM_config.open());
+GM_registerMenuCommand('⚠️ Clear All Cached Data', clearAllCache);
 
 
 // --- II. MAIN SCRIPT LOGIC ---
@@ -49,7 +56,9 @@ function runScript() {
     let trackDataCache = getCache();
     let genreRankingsVisible = GM_getValue('genreRankingsVisible', true);
 
-    const log = (message) => { if (DEBUG_MODE) console.log(message); };
+    const log = (message) => {
+        if (DEBUG_MODE) console.log(message);
+    };
 
     function showError(message) {
         const errorElement = document.createElement('div');
@@ -65,8 +74,12 @@ function runScript() {
         button.textContent = text;
         button.id = id;
         button.style.cssText = `margin-left: 3px; padding: 3px; border: 0; border-radius: 2px; background: #cba6f7; cursor: pointer; font-size: 10px; transition: background-color 0.2s;`;
-        button.addEventListener('mouseover', () => { if (!button.disabled) button.style.backgroundColor = '#f2cdcd'; });
-        button.addEventListener('mouseout', () => { if (!button.disabled) button.style.backgroundColor = '#cba6f7'; });
+        button.addEventListener('mouseover', () => {
+            if (!button.disabled) button.style.backgroundColor = '#f2cdcd';
+        });
+        button.addEventListener('mouseout', () => {
+            if (!button.disabled) button.style.backgroundColor = '#cba6f7';
+        });
         button.addEventListener('click', onClick);
         return button;
     }
@@ -75,7 +88,11 @@ function runScript() {
         const buttonContainer = document.createElement('div');
         buttonContainer.style.marginBottom = '10px';
         buttonContainer.classList.add('rym-track-ratings-buttons');
-        buttonsData.forEach(({ text, onClick, id }) => {
+        buttonsData.forEach(({
+            text,
+            onClick,
+            id
+        }) => {
             buttonContainer.appendChild(createButton(text, onClick, id));
         });
         return buttonContainer;
@@ -85,11 +102,17 @@ function runScript() {
         const trackContainers = [document.getElementById('tracks'), document.getElementById('tracks_mobile')];
         trackContainers.forEach((tracksContainer) => {
             if (tracksContainer && !tracksContainer.previousElementSibling?.classList.contains('rym-track-ratings-buttons')) {
-                const buttonContainer = createButtons([
-                    { text: 'Load Track Ratings', onClick: (e) => toggleTrackRatings(e.target), id: 'load-ratings-btn' },
-                    { text: 'Toggle Genre/Rankings', onClick: toggleGenreRankings },
-                    { text: 'Clear Cache', onClick: clearCache }
-                ]);
+                const buttonContainer = createButtons([{
+                    text: 'Load Track Ratings',
+                    onClick: (e) => toggleTrackRatings(e.target),
+                    id: 'load-ratings-btn'
+                }, {
+                    text: 'Toggle Genre/Rankings',
+                    onClick: toggleGenreRankings
+                }, {
+                    text: 'Clear Page Cache',
+                    onClick: clearPageCache
+                }]);
                 tracksContainer.parentNode.insertBefore(buttonContainer, tracksContainer);
             }
         });
@@ -101,12 +124,19 @@ function runScript() {
         const ratingElement = doc.querySelector('.page_section_main_info_music_rating_value_rating');
         const countElement = doc.querySelector('.page_section_main_info_music_rating_value_number');
         if (!ratingElement || !countElement) return null;
-        return { rating: ratingElement.textContent.trim().match(/\d+\.\d+/)?.[0], count: countElement.textContent.trim().match(/[\d,]+/)?.[0], isBold: !!ratingElement.querySelector('img[alt="rating bolded"]') };
+        return {
+            rating: ratingElement.textContent.trim().match(/\d+\.\d+/)?.[0],
+            count: countElement.textContent.trim().match(/[\d,]+/)?.[0],
+            isBold: !!ratingElement.querySelector('img[alt="rating bolded"]')
+        };
     }
 
     function parseTrackInfo(html) {
         const doc = new DOMParser().parseFromString(html, 'text/html');
-        return { genre: doc.querySelector('.page_song_header_info_genre_item_primary .genre')?.outerHTML || null, rankings: Array.from(doc.querySelectorAll('.page_song_header_info_rest .comma_separated')).map(el => el.outerHTML).join('<br>') };
+        return {
+            genre: doc.querySelector('.page_song_header_info_genre_item_primary .genre')?.outerHTML || null,
+            rankings: Array.from(doc.querySelectorAll('.page_song_header_info_rest .comma_separated')).map(el => el.outerHTML).join('<br>')
+        };
     }
 
     function createRatingHTML(rating, count, isBold) {
@@ -115,7 +145,10 @@ function runScript() {
     }
 
     function insertTrackRating(trackElement, rating, count, isBold) {
-        if (trackElement.querySelector('.page_release_section_tracks_track_stats_scores')) return;
+        const existingRatingWrapper = trackElement.querySelector('.page_release_section_tracks_track_stats_scores')?.parentElement;
+        if (existingRatingWrapper) {
+            existingRatingWrapper.remove();
+        }
         const tracklistLine = trackElement.querySelector('.tracklist_line');
         const trackNumber = trackElement.querySelector('.tracklist_num');
         if (tracklistLine && trackNumber) {
@@ -126,41 +159,52 @@ function runScript() {
     }
 
     function insertTrackInfo(trackElement, genre, rankings) {
-        if (trackElement.querySelector('.genre-info')) return;
-        const tracklistLine = trackElement.querySelector('.tracklist_line');
-        if (tracklistLine) {
+        if (trackElement.querySelector('.rym-userscript-info-container')) return;
+
+        const infoContainer = document.createElement('div');
+        infoContainer.className = 'rym-userscript-info-container';
+        infoContainer.style.cssText = 'margin-top: 5px; margin-bottom: 5px;';
+
+        if (genre) {
             const genreElement = document.createElement('div');
             genreElement.innerHTML = genre;
-            genreElement.style.marginTop = '2px';
             genreElement.classList.add('genre-info');
+            if (rankings) {
+                genreElement.style.marginBottom = '4px';
+            }
             genreElement.style.display = genreRankingsVisible ? 'block' : 'none';
-            tracklistLine.appendChild(genreElement);
+            infoContainer.appendChild(genreElement);
+        }
+
+        if (rankings) {
             const rankingElement = document.createElement('div');
             rankingElement.innerHTML = rankings;
-            rankingElement.style.marginTop = '2px';
             rankingElement.classList.add('ranking-info');
             rankingElement.style.display = genreRankingsVisible ? 'block' : 'none';
-            tracklistLine.appendChild(rankingElement);
+            infoContainer.appendChild(rankingElement);
         }
+
+        trackElement.appendChild(infoContainer);
     }
 
     // --- D. Core Logic: Fetching and Processing ---
-    async function processTrackData(trackElement) {
-        const songLink = trackElement.querySelector('a.song');
-        if (!songLink) return 'failed';
-
-        const trackName = songLink.textContent.trim();
-        const cacheKey = `rym_track_data_${songLink.href}`;
+    /**
+     * Fetches, parses, and caches data for a single track URL. Returns the data object.
+     * @param {string} url - The URL of the track page.
+     * @returns {Promise<object|null>} A promise resolving to the track's data object or null on failure.
+     */
+    async function fetchAndCacheTrackData(url) {
+        const cacheKey = `rym_track_data_${url}`;
         const cachedData = trackDataCache[cacheKey];
-
         if (cachedData) {
-            insertTrackRating(trackElement, cachedData.rating, cachedData.count, cachedData.isBold);
-            if (cachedData.genre) insertTrackInfo(trackElement, cachedData.genre, cachedData.rankings);
-            return 'cached';
+            return cachedData;
         }
 
         try {
-            const response = await fetch(songLink.href, { method: 'GET', credentials: 'include' });
+            const response = await fetch(url, {
+                method: 'GET',
+                credentials: 'include'
+            });
             if (!response.ok) {
                 if (response.status === 429) showError('Rate limit hit! Try increasing the request delay in settings.');
                 throw new Error(`HTTP error! Status: ${response.status}`);
@@ -168,32 +212,65 @@ function runScript() {
             const responseText = await response.text();
             const trackRating = parseTrackRating(responseText);
             const trackInfo = parseTrackInfo(responseText);
-            if (!trackRating || !trackInfo) return 'failed';
 
-            trackDataCache[cacheKey] = { ...trackRating, ...trackInfo, timestamp: Date.now() };
+            if (!trackRating || !trackInfo) return null;
+
+            const newData = { ...trackRating,
+                ...trackInfo,
+                timestamp: Date.now()
+            };
+            trackDataCache[cacheKey] = newData;
             GM_setValue('trackDataCache', trackDataCache);
-            insertTrackRating(trackElement, trackRating.rating, trackRating.count, trackRating.isBold);
-            insertTrackInfo(trackElement, trackInfo.genre, trackInfo.rankings);
-            return 'fetched';
+            return newData;
         } catch (error) {
+            const trackName = url.split('/').pop();
             showError(`Failed to fetch data for "${trackName}".`);
-            console.error(`Error processing "${trackName}":`, error);
-            return 'failed';
+            console.error(`Error processing "${url}":`, error);
+            return null;
         }
     }
 
-    async function processAllTracks(button) {
-        // --- THE FIX: Get a single, unified list of ALL track elements from both lists. ---
-        const allTrackElements = Array.from(document.querySelectorAll('#tracks li.track, #tracks_mobile li.track'));
+    /**
+     * Updates an array of track <li> elements with the provided rating and info.
+     * @param {HTMLElement[]} trackElements - Array of <li> elements for the same track.
+     * @param {object} data - The track data object from fetchAndCacheTrackData.
+     */
+    function updateTrackElements(trackElements, data) {
+        if (!data) return;
+        trackElements.forEach(trackElement => {
+            insertTrackRating(trackElement, data.rating, data.count, data.isBold);
+            insertTrackInfo(trackElement, data.genre, data.rankings);
+        });
+    }
 
-        // The "to-do list" is now correctly based on this unified list.
-        const tracksToFetch = allTrackElements.filter(trackElement => {
-            const songLink = trackElement.querySelector('a.song');
-            return songLink && !trackDataCache[`rym_track_data_${songLink.href}`];
+    async function processAllTracks(button) {
+        const allButtons = Array.from(document.querySelectorAll('#load-ratings-btn'));
+        const allTrackLiElements = Array.from(document.querySelectorAll('#tracks li.track, #tracks_mobile li.track'));
+
+        const tracksMap = new Map();
+        allTrackLiElements.forEach(el => {
+            const songLink = el.querySelector('a.song');
+            if (songLink) {
+                const url = songLink.href;
+                if (!tracksMap.has(url)) {
+                    tracksMap.set(url, []);
+                }
+                tracksMap.get(url).push(el);
+            }
         });
 
-        // Instantly process all cached tracks from the unified list.
-        allTrackElements.filter(t => !tracksToFetch.includes(t)).forEach(t => processTrackData(t));
+        const tracksToFetch = [];
+        for (const [url, elements] of tracksMap.entries()) {
+            const cacheKey = `rym_track_data_${url}`;
+            if (trackDataCache[cacheKey]) {
+                updateTrackElements(elements, trackDataCache[cacheKey]);
+            } else {
+                tracksToFetch.push({
+                    url,
+                    elements
+                });
+            }
+        }
 
         if (tracksToFetch.length === 0) {
             log('All tracks were already in cache.');
@@ -202,18 +279,34 @@ function runScript() {
             return;
         }
 
-        log(`Found ${tracksToFetch.length} elements to process.`);
+        log(`Found ${tracksToFetch.length} new tracks to process.`);
+        let loadedCount = 0;
+        const totalToFetch = tracksToFetch.length;
 
-        button.disabled = true;
-        button.style.cursor = 'wait';
-        button.textContent = `Loading...`;
+        allButtons.forEach(btn => {
+            btn.disabled = true;
+            btn.style.cursor = 'wait';
+            btn.textContent = `Loading... 0/${totalToFetch}`;
+        });
 
-        // The chunking logic operates on the unified list, and the cache prevents duplicate fetches.
         for (let i = 0; i < tracksToFetch.length; i += CHUNK_SIZE) {
             const chunk = tracksToFetch.slice(i, i + CHUNK_SIZE);
-            log(`Processing chunk starting at index ${i}...`);
+            log(`Processing chunk of ${chunk.length} tracks starting at index ${i}...`);
 
-            await Promise.all(chunk.map(track => processTrackData(track)));
+            const dataPromises = chunk.map(track => fetchAndCacheTrackData(track.url));
+            const results = await Promise.all(dataPromises);
+
+            results.forEach((data, index) => {
+                if (data) {
+                    const trackElementsToUpdate = chunk[index].elements;
+                    updateTrackElements(trackElementsToUpdate, data);
+                }
+                loadedCount++;
+            });
+
+            allButtons.forEach(btn => {
+                btn.textContent = `Loading... ${loadedCount}/${totalToFetch}`;
+            });
 
             if (i + CHUNK_SIZE < tracksToFetch.length) {
                 const requestDelay = GM_config.get('requestDelay');
@@ -222,9 +315,6 @@ function runScript() {
         }
 
         log('All tracks processed.');
-        button.textContent = 'Unload Ratings';
-        button.disabled = false;
-        button.style.cursor = 'pointer';
     }
 
     // --- E. User-Facing Button Actions ---
@@ -252,7 +342,7 @@ function runScript() {
 
     function clearTrackRatings() {
         document.querySelectorAll('.page_release_section_tracks_track_stats_scores').forEach(el => el.parentElement.remove());
-        document.querySelectorAll('.genre-info, .ranking-info').forEach(el => el.remove());
+        document.querySelectorAll('.rym-userscript-info-container').forEach(el => el.remove());
         document.querySelectorAll('#load-ratings-btn').forEach(btn => {
             btn.textContent = 'Load Track Ratings';
             btn.disabled = false;
@@ -287,10 +377,29 @@ function runScript() {
     }
 
     // --- F. Cache Management ---
-    function clearCache() {
-        trackDataCache = {};
-        GM_setValue('trackDataCache', {});
-        alert('RYM Track Ratings cache has been cleared.');
+    function clearPageCache() {
+        log('Clearing cache for the current page.');
+        const allTrackLiElements = Array.from(document.querySelectorAll('#tracks li.track, #tracks_mobile li.track'));
+        let clearedCount = 0;
+
+        allTrackLiElements.forEach(el => {
+            const songLink = el.querySelector('a.song');
+            if (songLink) {
+                const cacheKey = `rym_track_data_${songLink.href}`;
+                if (trackDataCache[cacheKey]) {
+                    delete trackDataCache[cacheKey];
+                    clearedCount++;
+                }
+            }
+        });
+
+        if (clearedCount > 0) {
+            GM_setValue('trackDataCache', trackDataCache);
+            alert(`Cleared ${clearedCount} cached track(s) for this page. Click "Load Track Ratings" to refresh.`);
+            clearTrackRatings();
+        } else {
+            alert('No cached tracks found for this page.');
+        }
     }
 
     function getCache() {
