@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         RYM Display Track Ratings
 // @namespace    http://tampermonkey.net/
-// @version      1.7
+// @version      1.8
 // @description  Displays average Track ratings and info directly on rateyourmusic album or any other release pages.
 // @author       cariosa
 // @match        https://rateyourmusic.com/release/*
@@ -11,8 +11,8 @@
 // @grant        GM_getValue
 // @grant        GM_registerMenuCommand
 // @license      GPL-3.0-or-later
-// @downloadURL  https://update.greasyfork.org/scripts/527869/RYM%20Display%20Track%20Ratings.user.js
-// @updateURL    https://update.greasyfork.org/scripts/527869/RYM%20Display%20Track%20Ratings.meta.js
+// @downloadURL https://update.greasyfork.org/scripts/527869/RYM%20Display%20Track%20Ratings.user.js
+// @updateURL https://update.greasyfork.org/scripts/527869/RYM%20Display%2DTrack%2DRatings.meta.js
 // ==/UserScript==
 
 // --- I. SETTINGS PANEL SETUP ---
@@ -118,6 +118,23 @@ function runScript() {
         });
     }
 
+    // MODIFIED: Fine-tuned spacing values for better visual balance.
+    function injectCustomStyles() {
+        const style = document.createElement('style');
+        style.textContent = `
+            /* Increase the left margin to create more space between the star and the rating value */
+            .page_release_section_tracks_track_stats_rating {
+                margin-left: 6px;
+            }
+            /* Further reduce space around the pipe separator for a more compact feel */
+            .page_release_section_tracks_track_stats_rating.pipe_separated::after,
+            .page_release_section_tracks_track_stats_count.pipe_separated::before {
+                padding: 0 0.35em !important;
+            }
+        `;
+        document.head.appendChild(style);
+    }
+
     // --- C. Data Parsing and HTML Injection ---
     function parseTrackRating(html) {
         const doc = new DOMParser().parseFromString(html, 'text/html');
@@ -133,9 +150,19 @@ function runScript() {
 
     function parseTrackInfo(html) {
         const doc = new DOMParser().parseFromString(html, 'text/html');
+
+        let genreHtml = null;
+        const genreLinkElement = doc.querySelector('.page_song_header_info_genre_item_primary .genre');
+        if (genreLinkElement) {
+            // Rebuild the link from its parts to avoid including the problematic "comma_separated" class
+            const href = genreLinkElement.getAttribute('href');
+            const text = genreLinkElement.textContent;
+            genreHtml = `<a class="genre" href="${href}">${text}</a>`;
+        }
+
         return {
-            genre: doc.querySelector('.page_song_header_info_genre_item_primary .genre')?.outerHTML || null,
-            rankings: Array.from(doc.querySelectorAll('.page_song_header_info_rest .comma_separated')).map(el => el.outerHTML).join('<br>')
+            genre: genreHtml,
+            rankings: Array.from(doc.querySelectorAll('.page_song_header_info_rest .comma_separated')).map(el => el.outerHTML).join(' ')
         };
     }
 
@@ -161,30 +188,25 @@ function runScript() {
     function insertTrackInfo(trackElement, genre, rankings) {
         if (trackElement.querySelector('.rym-userscript-info-container')) return;
 
-        const infoContainer = document.createElement('div');
-        infoContainer.className = 'rym-userscript-info-container';
-        infoContainer.style.cssText = 'margin-top: 5px; margin-bottom: 5px;';
-
+        let combinedHtml = '';
         if (genre) {
-            const genreElement = document.createElement('div');
-            genreElement.innerHTML = genre;
-            genreElement.classList.add('genre-info');
-            if (rankings) {
-                genreElement.style.marginBottom = '4px';
+            combinedHtml += genre;
+        }
+        if (rankings && rankings.trim().length > 0) {
+            if (combinedHtml.length > 0) {
+                combinedHtml += ' • '; // Separator between genre and rankings block
             }
-            genreElement.style.display = genreRankingsVisible ? 'block' : 'none';
-            infoContainer.appendChild(genreElement);
+            combinedHtml += rankings;
         }
 
-        if (rankings) {
-            const rankingElement = document.createElement('div');
-            rankingElement.innerHTML = rankings;
-            rankingElement.classList.add('ranking-info');
-            rankingElement.style.display = genreRankingsVisible ? 'block' : 'none';
-            infoContainer.appendChild(rankingElement);
+        if (combinedHtml.length > 0) {
+            const infoContainer = document.createElement('div');
+            infoContainer.className = 'rym-userscript-info-container';
+            infoContainer.style.cssText = 'margin-top: 5px; margin-bottom: 5px; margin-left: 34px;';
+            infoContainer.innerHTML = combinedHtml;
+            infoContainer.style.display = genreRankingsVisible ? 'block' : 'none';
+            trackElement.appendChild(infoContainer);
         }
-
-        trackElement.appendChild(infoContainer);
     }
 
     // --- D. Core Logic: Fetching and Processing ---
@@ -354,25 +376,8 @@ function runScript() {
     function toggleGenreRankings() {
         genreRankingsVisible = !genreRankingsVisible;
         GM_setValue('genreRankingsVisible', genreRankingsVisible);
-        document.querySelectorAll('li.track').forEach(trackElement => {
-            const genreInfoEl = trackElement.querySelector('.genre-info');
-            const rankingInfoEl = trackElement.querySelector('.ranking-info');
-            if (genreRankingsVisible) {
-                if (genreInfoEl) {
-                    genreInfoEl.style.display = 'block';
-                    if (rankingInfoEl) rankingInfoEl.style.display = 'block';
-                } else {
-                    const songLink = trackElement.querySelector('a.song');
-                    if (!songLink) return;
-                    const cachedData = trackDataCache[`rym_track_data_${songLink.href}`];
-                    if (cachedData && cachedData.genre) {
-                        insertTrackInfo(trackElement, cachedData.genre, cachedData.rankings);
-                    }
-                }
-            } else {
-                if (genreInfoEl) genreInfoEl.style.display = 'none';
-                if (rankingInfoEl) rankingInfoEl.style.display = 'none';
-            }
+        document.querySelectorAll('.rym-userscript-info-container').forEach(container => {
+            container.style.display = genreRankingsVisible ? 'block' : 'none';
         });
     }
 
@@ -417,6 +422,7 @@ function runScript() {
 
     // --- G. SCRIPT INITIALIZATION ---
     insertButtons();
+    injectCustomStyles(); // Call the function to apply custom styles
 }
 
 // --- III. SCRIPT EXECUTION TRIGGER ---
