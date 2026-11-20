@@ -3,8 +3,6 @@ Shows average track ratings, the track page genre and rankings, and each track's
 
 <img width="704" height="1224" alt="Fetched Ratings and Data - RYM Display Track Ratings" src="https://github.com/user-attachments/assets/adbebf47-3282-4491-9ffe-95cb5b2cd4d3" />
 
-Shows each track's own rating, genres, descriptors and chart rankings right on RateYourMusic release pages. RYM normally keeps most of this behind premium, so this saves you the clicks through every track page.
-
 **What you get**
 - Average rating and rating count next to each track, with the bold star when RYM shows one
 - The track page genre and its chart rankings
