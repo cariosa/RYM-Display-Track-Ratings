@@ -1,11 +1,28 @@
-# RYM-Display-Track-Ratings
-A Userscript that displays individual track ratings, genres, and track rankings on RateYourMusic album or any release pages.
+RYM-Display-Track-Ratings
+Shows average track ratings, the track page genre and rankings, and each track's own voted genres and descriptors directly on RYM release pages.
 
-<img src="https://github.com/user-attachments/assets/35ea3439-5e98-4812-a235-4f1fd337208d" alt="track ratings and genre info" width="300"/> <img src="https://github.com/user-attachments/assets/b30aa4aa-4356-43a5-a3ae-3deba3744efa" alt="track ratings" width="300"/>
+<img width="704" height="1224" alt="Fetched Ratings and Data - RYM Display Track Ratings" src="https://github.com/user-attachments/assets/adbebf47-3282-4491-9ffe-95cb5b2cd4d3" />
 
-These details are typically reserved for premium users, this userscript saves you a few clicks by fetching and displaying track information in any release page of rateyourmusic. It also works on firefox mobile.
+Shows each track's own rating, genres, descriptors and chart rankings right on RateYourMusic release pages. RYM normally keeps most of this behind premium, so this saves you the clicks through every track page.
 
-To prevent potential rate limiting and IP address being blocked, please use this userscript thoughtfully. It caches data for 7 days by default. Delay between requests and Cache duration is configurable. You can easily clear the cache by clicking the 'Clear Cache' button, and refresh the data by selecting 'Load Track Ratings' to obtain the latest information.
+**What you get**
+- Average rating and rating count next to each track, with the bold star when RYM shows one
+- The track page genre and its chart rankings
+- Each track's own voted genres, scenes, movements and descriptors, in a collapsible "Details" block. Items inherited from the album can be hidden.
+
+**How to use it**
+A small toolbar appears above the tracklist:
+- **Fetch Ratings** loads ratings, page genre and rankings.
+- **Fetch track details** loads the per-track genres and descriptors.
+- **Show** toggles the display, and the gear menu has Expand all, Page genre beside details, Hide inherited and Clear data for this release.
+
+Click a running fetch button again to stop it. Shift+click refetches everything, even data that is still fresh.
+
+**Please go easy on it.** Fetching sends a lot of requests, and RYM can rate-limit or block your IP. Data is stored on your device and fetch buttons skip anything newer than 7 days. The delay between requests and the cache age are both set from your userscript manager menu. If Cloudflare shows a challenge, the script stops. Solve it in the tab, wait a while, then continue.
+
+Works on Firefox mobile too.
+
+**v2.0:** rewritten and now stores data per song and per release. Anything saved by v1 is not carried over, so you'll need to fetch it again.
 
 ## Installation
 
